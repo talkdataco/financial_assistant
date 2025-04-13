@@ -2,11 +2,16 @@
 
 import os
 import time
+import json
 from financial_assistant.models.ollama import get_ollama_model
 from financial_assistant.agents.query_analyzer import QueryAnalyzer
 from financial_assistant.agents.data_fetcher import DataFetcher
+from financial_assistant.agents.response_generator import ResponseGenerator
+from financial_assistant.models.rag_engine import RAGEngine, MockEmbeddings
 from financial_assistant.connectors.google_analytics import GoogleAnalyticsConnector
 from financial_assistant.connectors.stripe import StripeConnector
+from financial_assistant.agents.insight_generator import InsightGenerator
+
 
 def main():
     """Main entry point for the financial analytics assistant."""
@@ -32,8 +37,9 @@ def main():
     
     # Initialize connectors with mock credentials
     ga_connector = GoogleAnalyticsConnector({
-        'key_file': './config/ga_credentials.json',  # This file doesn't need to exist for the mock
-        'property_id': '123456789'
+        # 'key_file': 'config/ga_credentials.json',  # This file doesn't need to exist for the mock
+        # 'property_id': 'properties/340692964'
+        'key_file': 'mock',
     })
     
     stripe_connector = StripeConnector({
@@ -46,9 +52,13 @@ def main():
         'stripe': stripe_connector
     }
     
-    # Initialize the query analyzer and data fetcher
+    # Initialize components
     analyzer = QueryAnalyzer(llm)
     fetcher = DataFetcher(connectors)
+    
+    # Initialize RAG components
+    rag_engine = RAGEngine(llm, MockEmbeddings())
+    response_generator = ResponseGenerator(rag_engine)
     
     # Test queries
     test_queries = [
@@ -76,27 +86,35 @@ def main():
             
             # Fetch the data
             print("\nFetching data...")
-            result = fetcher.fetch(analysis)
+            data = fetcher.fetch(analysis)
             
-            # Display results
-            print("\nResults:")
-            for source, data in result["data"].items():
-                print(f"\nFrom {source.upper()}:")
-                if "error" in data:
-                    print(f"  Error: {data['error']}")
-                else:
-                    for metric_name, metric_data in data.get("data", {}).items():
-                        print(f"  {metric_name.upper()}:")
-                        for key, value in metric_data.items():
-                            if key == "dimensions":
-                                print(f"    {key}:")
-                                for dim_name, dim_data in value.items():
-                                    print(f"      {dim_name}: {dim_data}")
-                            else:
-                                print(f"    {key}: {value}")
+            # Generate response
+            print("\nGenerating response...")
+            result = response_generator.generate_response(query, analysis, data)
+            
+            # Display the response
+            print("\nRESPONSE:")
+            print(result["response"])
+            
+            # Display follow-up questions
+            print("\nFOLLOW-UP QUESTIONS:")
+            for i, question in enumerate(result["follow_up_questions"], 1):
+                print(f"{i}. {question}")
+            
+
+            # Generate Insights
+            insight_generator = InsightGenerator(llm)
+            print("\nGenerating additional insights...")
+            insights = insight_generator.generate_insights(query, analysis, data)
+
+            print("\nADDITIONAL INSIGHTS:")
+            for i, insight in enumerate(insights, 1):
+                print(f"{i}. {insight}")
             
         except Exception as e:
             print(f"❌ Error processing query: {e}")
+            import traceback
+            traceback.print_exc()
 
 if __name__ == "__main__":
     main()
