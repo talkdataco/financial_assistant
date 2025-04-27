@@ -100,7 +100,10 @@ class RAGEngine:
             metadatas=metadatas
         )
     
-    def generate_response(self, query: str, query_analysis: Any, data: Dict[str, Any]) -> str:
+    # Update the generate_response method in the RAGEngine class
+
+    def generate_response(self, query: str, query_analysis: Any, data: Dict[str, Any], 
+                        include_calculations: bool = False) -> str:
         """
         Generate a response using RAG.
         
@@ -108,6 +111,7 @@ class RAGEngine:
             query: Original user query
             query_analysis: Structured analysis of the query
             data: Data fetched from various sources
+            include_calculations: Whether to include calculation details
             
         Returns:
             Generated response
@@ -115,6 +119,11 @@ class RAGEngine:
         # For simplicity in this version, we'll just use the direct context
         # without relying on vector search
         context = self.prepare_context(query, query_analysis, data)
+        
+        # Add calculation context if available and requested
+        if include_calculations and "calculations" in data:
+            calc_context = self._prepare_calculation_context(data["calculations"])
+            context = context + "\n\n" + calc_context
         
         # Still build the vector store for future use, but don't use it yet
         try:
@@ -136,16 +145,69 @@ class RAGEngine:
             Provide a helpful, concise response in a professional tone. Include key numbers and percentage changes.
             Break down complex information into easily understandable points.
             
+            {calculation_instructions}
+            
             YOUR RESPONSE:
             """,
-            input_variables=["query", "context"]
+            input_variables=["query", "context", "calculation_instructions"]
         )
         
+        # Add calculation-specific instructions if needed
+        calculation_instructions = ""
+        if include_calculations and "calculations" in data:
+            calculation_instructions = """
+            This query involved calculations. Make sure to explain:
+            1. What was calculated and why
+            2. The numerical result in a clear format
+            3. What the result means in business terms
+            4. Any insights that can be drawn from this calculation
+            """
+        
         # Generate the response
-        prompt = prompt_template.format(query=query, context=context)
+        prompt = prompt_template.format(
+            query=query, 
+            context=context,
+            calculation_instructions=calculation_instructions
+        )
         response = self.llm.invoke(prompt)
         
         return response
+
+    def _prepare_calculation_context(self, calculations: Dict[str, Any]) -> str:
+        """
+        Prepare a context section for calculation results.
+        
+        Args:
+            calculations: Dictionary of calculation results
+            
+        Returns:
+            Formatted context string
+        """
+        context_parts = ["CALCULATION RESULTS:"]
+        
+        for metric_name, calc_info in calculations.items():
+            if "error" in calc_info:
+                context_parts.append(f"\n{metric_name}:")
+                context_parts.append(f"- Error: {calc_info['error']}")
+                context_parts.append(f"- Attempted calculation: {calc_info['expression']}")
+            else:
+                value = calc_info["value"]
+                if isinstance(value, float):
+                    if metric_name.endswith("_percent") or "percentage" in metric_name or "rate" in metric_name:
+                        formatted_value = f"{value:.2f}%"
+                    elif abs(value) > 1000:
+                        formatted_value = f"{value:,.2f}"
+                    else:
+                        formatted_value = f"{value:.2f}"
+                else:
+                    formatted_value = str(value)
+                    
+                context_parts.append(f"\n{metric_name}:")
+                context_parts.append(f"- Result: {formatted_value}")
+                context_parts.append(f"- Description: {calc_info['description']}")
+                context_parts.append(f"- Expression: {calc_info['expression']}")
+        
+        return "\n".join(context_parts)
     
     def generate_follow_up_questions(self, query: str, query_analysis: Any, data: Dict[str, Any], response: str) -> List[str]:
         """

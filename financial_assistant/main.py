@@ -65,8 +65,9 @@ def main():
         # "What was my conversion rate last month compared to the previous month?",
         # "Show me revenue by product category from Stripe for Q1",
         # "What's the average order value from Stripe and how has it changed over the last 30 days?"
-        "What are the number of new users for March 2025?",
+        "What are the number of active users for March 2025?",
         # "What are the number of total visits in March 2025?",
+        # "What are the number of average daily users on 22nd April, 2025?"
     ]
     
     for query in test_queries:
@@ -85,6 +86,12 @@ def main():
             print(f"Time Period: {analysis.time_period}")
             print(f"Comparison Period: {analysis.comparison_period}")
             print(f"Filters: {analysis.filters}")
+        
+            # Log calculation requirements if any
+            if analysis.requires_calculation:
+                print("\nQuery requires calculations:")
+                for i, step in enumerate(analysis.calculation_steps, 1):
+                    print(f"  {i}. {step.description}: {step.expression}")
             
             # Fetch the data
             print("\nFetching data...")
@@ -97,21 +104,29 @@ def main():
             # Display the response
             print("\nRESPONSE:")
             print(result["response"])
-            
-            # Display follow-up questions
-            print("\nFOLLOW-UP QUESTIONS:")
-            for i, question in enumerate(result["follow_up_questions"], 1):
-                print(f"{i}. {question}")
+
+            # Display calculation explanations if any
+            if "calculation_explanations" in result:
+                print("\nCALCULATION DETAILS:")
+                for metric, explanation in result["calculation_explanations"].items():
+                    print(f"\n{metric}:")
+                    print(explanation)
             
 
-            # Generate Insights
-            insight_generator = InsightGenerator(llm)
-            print("\nGenerating additional insights...")
-            insights = insight_generator.generate_insights(query, analysis, data)
+            # # Display follow-up questions
+            # print("\nFOLLOW-UP QUESTIONS:")
+            # for i, question in enumerate(result["follow_up_questions"], 1):
+            #     print(f"{i}. {question}")
+            
 
-            print("\nADDITIONAL INSIGHTS:")
-            for i, insight in enumerate(insights, 1):
-                print(f"{i}. {insight}")
+            # # Generate Insights
+            # insight_generator = InsightGenerator(llm)
+            # print("\nGenerating additional insights...")
+            # insights = insight_generator.generate_insights(query, analysis, data)
+
+            # print("\nADDITIONAL INSIGHTS:")
+            # for i, insight in enumerate(insights, 1):
+            #     print(f"{i}. {insight}")
             
         except Exception as e:
             print(f"❌ Error processing query: {e}")

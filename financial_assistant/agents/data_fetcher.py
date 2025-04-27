@@ -3,10 +3,17 @@
 from typing import Dict, List, Any, Optional
 from financial_assistant.agents.query_analyzer import QueryAnalysis
 from financial_assistant.connectors.base import DataConnector
+from financial_assistant.utils.calculator import FinancialCalculator
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class DataFetcher:
     """
     Agent responsible for fetching data from various sources based on query analysis.
+    Now with support for calculations on the fetched data.
     """
     
     def __init__(self, connectors: Dict[str, DataConnector]):
@@ -17,6 +24,7 @@ class DataFetcher:
             connectors: Dictionary mapping connector names to connector instances
         """
         self.connectors = connectors
+        self.calculator = FinancialCalculator()
     
     def fetch(self, analysis: QueryAnalysis) -> Dict[str, Any]:
         """
@@ -34,7 +42,8 @@ class DataFetcher:
                 "dimensions": analysis.dimensions,
                 "time_period": analysis.time_period,
                 "comparison_period": analysis.comparison_period,
-                "filters": analysis.filters
+                "filters": analysis.filters,
+                "requires_calculation": analysis.requires_calculation
             },
             "data": {}
         }
@@ -71,6 +80,10 @@ class DataFetcher:
                             key, value = filter_str.split(":", 1)
                             filters[key.strip()] = value.strip()
                 
+                # Add comparison period to filters if present
+                if analysis.comparison_period:
+                    filters["comparison_period"] = analysis.comparison_period
+                
                 # Fetch current period data
                 current_data = connector.fetch_data(
                     metrics=analysis.metrics,
@@ -80,8 +93,8 @@ class DataFetcher:
                     filters=filters
                 )
                 
-                # Fetch comparison period data if needed
-                if analysis.comparison_period:
+                # Fetch comparison period data if needed but not already included
+                if analysis.comparison_period and "comparison_data" not in current_data:
                     comparison_data = connector.fetch_data(
                         metrics=analysis.metrics,
                         dimensions=analysis.dimensions,
@@ -100,4 +113,73 @@ class DataFetcher:
                     "error": f"Connector for {source} not available"
                 }
         
+        # If calculations are required, perform them
+        if analysis.requires_calculation and analysis.calculation_steps:
+            result = self.perform_calculations(analysis, result)
+            
         return result
+    
+    def perform_calculations(self, analysis: QueryAnalysis, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Perform calculations on the fetched data.
+        
+        Args:
+            analysis: QueryAnalysis object with calculation steps
+            data: Fetched data
+            
+        Returns:
+            Data dictionary with calculation results added
+        """
+        # Initialize the calculator with the fetched data
+        self.calculator.update_context(data)
+        
+        # Create a calculations section in the result
+        if "calculations" not in data:
+            data["calculations"] = {}
+            
+        # Process each calculation step
+        for step in analysis.calculation_steps:
+            try:
+                # Evaluate the expression
+                result = self.calculator.evaluate(step.expression)
+                
+                # Store the result
+                data["calculations"][step.result_metric] = {
+                    "value": result,
+                    "expression": step.expression,
+                    "description": step.description,
+                    "explanation": self.calculator.explain_calculation(step.expression, result)
+                }
+                
+                logger.info(f"Calculated {step.result_metric}: {result} using {step.expression}")
+                
+            except Exception as e:
+                logger.error(f"Error calculating {step.result_metric}: {e}")
+                data["calculations"][step.result_metric] = {
+                    "error": str(e),
+                    "expression": step.expression,
+                    "description": step.description
+                }
+        
+        return data
+    
+    def fetch_for_complex_query(self, analysis: QueryAnalysis) -> Dict[str, Any]:
+        """
+        Handle a complex query that requires multiple data fetches.
+        
+        Args:
+            analysis: QueryAnalysis object with potential sub-queries
+            
+        Returns:
+            Combined data from all sub-queries with calculations
+        """
+        # This is a placeholder for more sophisticated handling of complex queries
+        # In a full implementation, we would:
+        # 1. Decompose the query into sub-queries
+        # 2. Modify analysis for each sub-query
+        # 3. Fetch data for each sub-query
+        # 4. Combine the results
+        # 5. Perform calculations on the combined data
+        
+        # For now, we'll just use the regular fetch method
+        return self.fetch(analysis)
