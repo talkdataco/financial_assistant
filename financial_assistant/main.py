@@ -37,9 +37,9 @@ def main():
     
     # Initialize connectors with mock credentials
     ga_connector = GoogleAnalyticsConnector({
-        # 'key_file': 'config/ga_credentials.json',  # This file doesn't need to exist for the mock
-        # 'property_id': 'properties/340692964'
-        'key_file': 'mock',
+        'key_file': 'financial_assistant/config/ecclesia.json',  # This file doesn't need to exist for the mock
+        'property_id': 'properties/386584150'
+        # 'key_file': 'mock',
     })
     
     stripe_connector = StripeConnector({
@@ -62,9 +62,11 @@ def main():
     
     # Test queries
     test_queries = [
-        "What was my conversion rate last month compared to the previous month?",
-        "Show me revenue by product category from Stripe for Q1",
-        "What's the average order value from Stripe and how has it changed over the last 30 days?"
+        # "What was my conversion rate last month compared to the previous month?",
+        # "Show me revenue by product category from Stripe for Q1",
+        # "What's the average order value from Stripe and how has it changed over the last 30 days?"
+        "What are the number of new users for March 2025?",
+        # "What are the number of total visits in March 2025?",
     ]
     
     for query in test_queries:
